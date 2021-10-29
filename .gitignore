@@ -121,3 +121,9 @@ work_dirs/
 *.pth
 *.py~
 *.sh~
+
+# Experiment Folders
+batch_files/
+slurm/
+lvis_files/
+experiments/

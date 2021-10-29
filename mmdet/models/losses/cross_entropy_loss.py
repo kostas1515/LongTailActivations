@@ -99,9 +99,7 @@ def binary_cross_entropy(pred,
     ignore_index = -100 if ignore_index is None else ignore_index
     if pred.dim() != label.dim():
         label, weight = _expand_onehot_labels(label, weight, pred.size(-1),
-                                              ignore_index)
-
-    # weighted element-wise losses
+                                           ignore_index)  
     if weight is not None:
         weight = weight.float()
     loss = F.binary_cross_entropy_with_logits(
