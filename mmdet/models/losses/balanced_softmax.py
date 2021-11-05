@@ -37,6 +37,7 @@ def binary_cross_entropy(pred,
                          avg_factor=None,
                          class_weight=None,
                          margins=None,
+                         variant='sigmoid',
                          ignore_index=-100):
     """Calculate the binary CrossEntropy loss.
 
@@ -66,9 +67,24 @@ def binary_cross_entropy(pred,
     
     if (margins is not None):
         pred[:,:-1]-= margins
+        
     
-    loss = F.binary_cross_entropy_with_logits(
-        pred, label.float(), reduction='none')
+    if variant =='sigmoid': 
+        loss = F.binary_cross_entropy_with_logits(pred, label.float(), reduction='none')
+    elif variant =='gumbel':
+        pestim = 1/(torch.exp(torch.exp(-pred)))
+        loss = F.binary_cross_entropy(pestim, label.float(), reduction='none')
+    elif variant =='normal':
+        pestim=1/2+torch.erf(pred/(2**(1/2)))/2
+        loss = F.binary_cross_entropy(pestim, label.float(), reduction='none')
+    elif variant =='softmax':
+        pred[:,:-1]+= margins
+        lvis_img_freq = (pd.read_csv('./lvis_files/idf_1204.csv')['img_freq']).values
+        lvis_img_freq = (torch.tensor(lvis_img_freq,dtype=torch.float,device='cuda')[1:]).unsqueeze(0)
+        pred[:,:-1]+= torch.log(lvis_img_freq)
+        loss = F.cross_entropy(pred, label.argmax(axis=1), reduction='mean')
+        return loss
+    
     # do the reduction for the weighted loss
     loss = weight_reduce_loss(
         loss, weight, reduction=reduction, avg_factor=avg_factor)
@@ -85,6 +101,7 @@ class BalancedSoftmax(nn.Module):
                  use_sigmoid=True,
                  json_file='./lvis_files/idf_1204.csv',
                  variant='prob',
+                 cls_variant='sigmoid',
                  reduction='mean',
                  class_weight=None,
                  loss_weight=1.0,
@@ -109,6 +126,7 @@ class BalancedSoftmax(nn.Module):
         self.loss_weight = loss_weight
         self.class_weight = class_weight
         self.num_classes = num_classes
+        self.cls_variant = cls_variant
         
         # custom output channels of the classifier
         self.custom_cls_channels = True
@@ -130,7 +148,14 @@ class BalancedSoftmax(nn.Module):
             torch.Tensor: The custom activation of cls_score with shape
                  (N, C).
         """
-        scores = torch.sigmoid(cls_score)
+        if self.cls_variant == 'sigmoid':
+            scores = torch.sigmoid(cls_score)
+        elif self.cls_variant == 'gumbel':
+            scores = 1/(torch.exp(torch.exp(-cls_score)))
+        elif self.cls_variant == 'normal':
+            scores=1/2+torch.erf(cls_score/(2**(1/2)))/2
+        elif self.cls_variant == 'softmax':
+            scores = torch.softmax(cls_score,dim=-1)
         
         return scores
     
@@ -199,5 +224,6 @@ class BalancedSoftmax(nn.Module):
             reduction=reduction,
             avg_factor=avg_factor,
             margins=self.lvis_weights,
+            variant=self.cls_variant,
             **kwargs)
         return loss_cls

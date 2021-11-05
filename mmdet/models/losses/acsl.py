@@ -4,6 +4,7 @@ import torch.nn.functional as F
 import numpy as np
 import json
 from ..builder import LOSSES
+from .accuracy import accuracy
 
 '''
 Adaptive Class Supression Loss
@@ -15,7 +16,7 @@ Paper: https://openaccess.thecvf.com/content/CVPR2021/papers/Wang_Adaptive_Class
 @LOSSES.register_module()
 class ACSL(nn.Module):
 
-    def __init__(self, score_thr=0.7, json_file='../../datasets/lvis/data/lvis_v1_train.json', loss_weight=1.0):
+    def __init__(self, score_thr=0.7, json_file='../../datasets/lvis/data/lvis_v1_train.json', loss_weight=1.0,variant='sigmoid'):
 
         super(ACSL, self).__init__()
 
@@ -25,6 +26,50 @@ class ACSL(nn.Module):
 
         assert len(json_file) != 0
         self.freq_group = self.get_freq_info(json_file)
+        
+        self.variant = variant
+        
+        self.custom_activation = True
+        # custom accuracy of the classsifier
+        self.custom_accuracy = True
+        
+    def get_activation(self, cls_score):
+        """Get custom activation of cls_score.
+
+        Args:
+            cls_score (torch.Tensor): The prediction with shape (N, C).
+
+        Returns:
+            torch.Tensor: The custom activation of cls_score with shape
+                 (N, C).
+        """
+        if self.variant=='gumbel':
+            scores = 1/(torch.exp(torch.exp(-cls_score)))
+        elif self.variant=='normal':
+            scores=1/2+torch.erf(cls_score/(2**(1/2)))/2
+        elif self.variant=='softmax':
+            scores= torch.softmax(cls_score,dim=-1)
+        elif self.variant=='sigmoid':
+            scores= torch.sigmoid(cls_score)
+
+        return scores
+    
+    def get_accuracy(self, cls_score, labels):
+        """Get custom accuracy w.r.t. cls_score and labels.
+
+        Args:
+            cls_score (torch.Tensor): The prediction with shape (N, C).
+            labels (torch.Tensor): The learning label of the prediction.
+
+        Returns:
+            Dict [str, torch.Tensor]: The accuracy for objectness and classes,
+                 respectively.
+        """
+        acc_classes = accuracy(cls_score, labels)
+        acc = dict()
+        acc['acc_Cls'] = acc_classes
+        
+        return acc
 
     def get_freq_info(self, json_file):
         cats = json.load(open(json_file, 'r'))['categories']
@@ -57,9 +102,17 @@ class ACSL(nn.Module):
         labels = (labels+1)%self.n_c
         
         unique_label = torch.unique(labels)
-
+        
         with torch.no_grad():
-            sigmoid_cls_logits = torch.sigmoid(cls_logits)
+            if self.variant =='sigmoid':
+                sigmoid_cls_logits = torch.sigmoid(cls_logits)
+            elif self.variant =='gumbel':
+                sigmoid_cls_logits = 1/(torch.exp(torch.exp(-(torch.clamp(cls_logits,min=-4,max=10)))))
+            elif self.variant =='normal':
+                sigmoid_cls_logits = 1/2+torch.erf(torch.clamp(cls_logits,min=-5,max=5)/(2**(1/2)))/2
+            elif self.variant =='softmax':
+                sigmoid_cls_logits = torch.softmax(cls_logits,dim=-1)
+            
         # for each sample, if its score on unrealated class hight than score_thr, their gradient should not be ignored
         # this is also applied to negative samples
         high_score_inds = torch.nonzero(sigmoid_cls_logits>=self.score_thr)
@@ -126,7 +179,17 @@ class ACSL(nn.Module):
                 tmp_weight_mask_vec[:, cur_labels] = 1
 
                 weight_mask[cls_inds] = tmp_weight_mask_vec
-
-        cls_loss = F.binary_cross_entropy_with_logits(cls_logits, target.float(), reduction='none')
-
+                
+        if self.variant =='sigmoid': 
+            cls_loss = F.binary_cross_entropy_with_logits(cls_logits, target.float(), reduction='none')
+        elif self.variant =='gumbel':
+            pestim = 1/(torch.exp(torch.exp(-(torch.clamp(cls_logits,min=-4,max=10)))))
+            cls_loss = F.binary_cross_entropy(pestim, target.float(), reduction='none')
+        elif self.variant =='normal':
+            pestim=1/2+torch.erf(torch.clamp(cls_logits,min=-5,max=5)/(2**(1/2)))/2
+            cls_loss = F.binary_cross_entropy(pestim, target.float(), reduction='none')
+        elif self.variant =='softmax':
+            cls_loss = F.cross_entropy(weight_mask*cls_logits, target.argmax(axis=1), reduction='mean')
+            return cls_loss
+        
         return torch.sum(weight_mask * cls_loss) / self.n_i
