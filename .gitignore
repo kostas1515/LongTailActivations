@@ -127,3 +127,4 @@ batch_files/
 slurm/
 lvis_files/
 experiments/
+demo/

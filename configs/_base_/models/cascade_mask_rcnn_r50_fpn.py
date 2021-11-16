@@ -194,3 +194,5 @@ model = dict(
             nms=dict(type='nms', iou_threshold=0.5),
             max_per_img=100,
             mask_thr_binary=0.5)))
+            
+fp16 = dict(loss_scale=512.) 

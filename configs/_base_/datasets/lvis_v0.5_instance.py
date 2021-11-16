@@ -1,9 +1,9 @@
 # dataset settings
 _base_ = 'coco_instance.py'
 dataset_type = 'LVISV05Dataset'
-data_root = 'data/lvis_v0.5/'
+data_root = '../../datasets/coco/'
 data = dict(
-    samples_per_gpu=2,
+    samples_per_gpu=4,
     workers_per_gpu=2,
     train=dict(
         _delete_=True,
