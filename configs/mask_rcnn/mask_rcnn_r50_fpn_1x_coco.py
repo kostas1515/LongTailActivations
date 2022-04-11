@@ -3,3 +3,6 @@ _base_ = [
     '../_base_/datasets/coco_instance.py',
     '../_base_/schedules/schedule_1x.py', '../_base_/default_runtime.py'
 ]
+
+
+work_dir='./experiments/coco/baselines/r50_4x4_1x/'

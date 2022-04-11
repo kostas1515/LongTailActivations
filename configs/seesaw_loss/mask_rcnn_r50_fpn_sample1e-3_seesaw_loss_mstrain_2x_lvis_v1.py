@@ -39,3 +39,5 @@ train_pipeline = [
 ]
 data = dict(train=dict(dataset=dict(pipeline=train_pipeline)))
 evaluation = dict(interval=12, metric=['bbox', 'segm'])
+
+work_dir='./experiments/test'

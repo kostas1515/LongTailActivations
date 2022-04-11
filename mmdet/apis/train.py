@@ -15,6 +15,8 @@ from mmdet.datasets import (build_dataloader, build_dataset,
                             replace_ImageToTensor)
 from mmdet.utils import get_root_logger
 
+from .epoch_based_dynamic_runner import EpochBasedDynamicRunner
+
 
 def set_random_seed(seed, deterministic=False):
     """Set random seed.
@@ -126,9 +128,15 @@ def train_detector(model,
     runner.register_training_hooks(cfg.lr_config, optimizer_config,
                                    cfg.checkpoint_config, cfg.log_config,
                                    cfg.get('momentum_config', None))
+    
     if distributed:
-        if isinstance(runner, EpochBasedRunner):
+        if isinstance(runner, EpochBasedRunner) or \
+           isinstance(runner, EpochBasedDynamicRunner):
             runner.register_hook(DistSamplerSeedHook())
+    
+#     if distributed:
+#         if isinstance(runner, EpochBasedRunner):
+#             runner.register_hook(DistSamplerSeedHook())
 
     # register eval hooks
     if validate:

@@ -22,6 +22,9 @@ from .multiactivation import MultiActivation
 from .balanced_softmax import BalancedSoftmax
 from .acsl import ACSL
 from .eqlv2 import EQLv2
+from .iif_loss import IIFLoss
+from .fasa_loss import CrossEntropyCounterLoss
+
 
 
 __all__ = [
@@ -33,5 +36,5 @@ __all__ = [
     'GHMR', 'reduce_loss', 'weight_reduce_loss', 'weighted_loss', 'L1Loss',
     'l1_loss', 'isr_p', 'carl_loss', 'AssociativeEmbeddingLoss',
     'GaussianFocalLoss', 'QualityFocalLoss', 'DistributionFocalLoss',
-    'VarifocalLoss', 'KnowledgeDistillationKLDivLoss', 'SeesawLoss','Icloglog','MultiActivation','BalancedSoftmax','ACSL','EQLv2'
+    'VarifocalLoss', 'KnowledgeDistillationKLDivLoss', 'SeesawLoss','Icloglog','MultiActivation','BalancedSoftmax','ACSL','EQLv2','IIFLoss','CrossEntropyCounterLoss'
 ]

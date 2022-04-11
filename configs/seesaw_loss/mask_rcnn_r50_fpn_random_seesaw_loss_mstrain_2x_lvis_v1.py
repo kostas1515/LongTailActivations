@@ -53,9 +53,9 @@ test_pipeline = [
         ])
 ]
 dataset_type = 'LVISV1Dataset'
-data_root = 'data/lvis_v1/'
+data_root = '../../datasets/coco/'
 data = dict(
-    samples_per_gpu=2,
+    samples_per_gpu=4,
     workers_per_gpu=2,
     train=dict(
         type=dataset_type,
@@ -73,3 +73,6 @@ data = dict(
         img_prefix=data_root,
         pipeline=test_pipeline))
 evaluation = dict(interval=24, metric=['bbox', 'segm'])
+
+
+work_dir='./experiments/seesaw_rfs/'
