@@ -23,6 +23,9 @@ from .sparse_roi_head import SparseRoIHead
 from .standard_roi_head import StandardRoIHead
 from .trident_roi_head import TridentRoIHead
 from .fasa_roi_head import StandardFASARoIHead
+from .local_roi_head import StandardLocalRoIHead
+from .cascade_fasa_roi_head import StandardFASACascadeRoIHead
+
 
 __all__ = [
     'BaseRoIHead', 'CascadeRoIHead', 'DoubleHeadRoIHead', 'MaskScoringRoIHead',
@@ -34,5 +37,5 @@ __all__ = [
     'SingleRoIExtractor', 'PISARoIHead', 'PointRendRoIHead', 'MaskPointHead',
     'CoarseMaskHead', 'DynamicRoIHead', 'SparseRoIHead', 'TridentRoIHead',
     'SCNetRoIHead', 'SCNetMaskHead', 'SCNetSemanticHead', 'SCNetBBoxHead',
-    'FeatureRelayHead', 'GlobalContextHead','StandardFASARoIHead'
+    'FeatureRelayHead', 'GlobalContextHead','StandardFASARoIHead','StandardFASACascadeRoIHead','StandardLocalRoIHead'
 ]

@@ -8,6 +8,6 @@ _base_ = [
 model = dict(roi_head=dict(bbox_head=dict(loss_cls=dict(type="IIFLoss",variant='raw',num_classes=80,path='./coco_files/idf_91.csv'),
                                          init_cfg = dict(type='Constant',val=0.001, bias=0.0, override=dict(name='fc_cls')))))
 
-load_from='./experiments/coco/iif_r50_4x4_1x/latest.pth'
+load_from='./experiments/coco/baselines/r50_4x4_1x/latest.pth'
 selectp=1
 work_dir='./experiments/coco/iif_decoup_r50_4x4_1x/'

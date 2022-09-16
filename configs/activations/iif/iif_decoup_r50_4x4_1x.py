@@ -10,9 +10,7 @@ data = dict(train=dict(oversample_thr=0.0))
 model = dict(roi_head=dict(bbox_head=dict(loss_cls=dict(type="IIFLoss",variant='raw'),
                                          init_cfg = dict(type='Constant',val=0.001, bias=0.0, override=dict(name='fc_cls')))))
 
-
 work_dir='./experiments/iif/iif_decoup_r50_4x4_1x/'
-load_from='./experiments/iif/iif_r50_4x4_1x/latest.pth'
-
+load_from='./experiments/baselines/r50_4x4_1x_softmax/latest.pth'
 selectp=1
 # work_dir='./experiments/test/'

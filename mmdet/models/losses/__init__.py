@@ -23,7 +23,13 @@ from .balanced_softmax import BalancedSoftmax
 from .acsl import ACSL
 from .eqlv2 import EQLv2
 from .iif_loss import IIFLoss
+from .ada_iif_loss import ADAIIFLoss
+from .ada_rel_iif_loss import ADARELIIFLoss
+
 from .fasa_loss import CrossEntropyCounterLoss
+from .fasa_iif_loss import FasaIIFLoss
+from .fasa_ada_iif_loss import FasaADAIIFLoss
+from .ldam import LDAM
 
 
 
@@ -36,5 +42,7 @@ __all__ = [
     'GHMR', 'reduce_loss', 'weight_reduce_loss', 'weighted_loss', 'L1Loss',
     'l1_loss', 'isr_p', 'carl_loss', 'AssociativeEmbeddingLoss',
     'GaussianFocalLoss', 'QualityFocalLoss', 'DistributionFocalLoss',
-    'VarifocalLoss', 'KnowledgeDistillationKLDivLoss', 'SeesawLoss','Icloglog','MultiActivation','BalancedSoftmax','ACSL','EQLv2','IIFLoss','CrossEntropyCounterLoss'
+    'VarifocalLoss', 'KnowledgeDistillationKLDivLoss', 'SeesawLoss','Icloglog',
+    'MultiActivation','BalancedSoftmax','ACSL','EQLv2','IIFLoss','CrossEntropyCounterLoss','ADAIIFLoss','ADARELIIFLoss',
+    'FasaIIFLoss','FasaADAIIFLoss','LDAM'
 ]

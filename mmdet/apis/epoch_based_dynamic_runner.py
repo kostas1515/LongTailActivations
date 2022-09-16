@@ -4,6 +4,7 @@ import torch
 from mmcv.runner import EpochBasedRunner
 from mmcv.runner.hooks import TensorboardLoggerHook
 from mmcv.runner.builder import RUNNERS
+import torch.distributed as dist
 
 
 @RUNNERS.register_module()
@@ -32,8 +33,8 @@ class EpochBasedDynamicRunner(EpochBasedRunner):
                 if isinstance(hook, TensorboardLoggerHook):
                     bbox_head.tf_writer = hook.writer
         # -- end
-
-        time.sleep(2)  # Prevent possible deadlock during epoch transition
+        dist.barrier()
+        time.sleep(1)  # Prevent possible deadlock during epoch transition
         for i, data_batch in enumerate(self.data_loader):
             self._inner_iter = i
             self.call_hook('before_train_iter')
@@ -50,14 +51,20 @@ class EpochBasedDynamicRunner(EpochBasedRunner):
         self.mode = 'val'
         self.data_loader = data_loader
         self.call_hook('before_val_epoch')
-        time.sleep(2)  # Prevent possible deadlock during epoch transition
+        dist.barrier()
+        time.sleep(1)  # Prevent possible deadlock during epoch transition
 
         # -- begin: add for adaptive sampling
         if hasattr(self.model, 'module'):
             bbox_head = self.model.module.roi_head.bbox_head
         else:
             bbox_head = self.model.roi_head.bbox_head
-        bbox_head.loss_cls.open_cums()
+        
+        try:
+            bbox_head.loss_cls.open_cums()
+        except torch.nn.modules.module.ModuleAttributeError: #model is cascade
+            for bh in bbox_head:
+                bh.loss_cls.open_cums() 
         # -- end
 
         for i, data_batch in enumerate(self.data_loader):
@@ -67,8 +74,13 @@ class EpochBasedDynamicRunner(EpochBasedRunner):
             self.call_hook('after_val_iter')
 
         # -- begin: add for adaptive sampling
-        bbox_head.dynamic_sampling()
-        bbox_head.loss_cls.close_cums()
+        try:
+            bbox_head.dynamic_sampling()
+            bbox_head.loss_cls.close_cums()
+        except torch.nn.modules.module.ModuleAttributeError: #model is cascade
+            for bh in bbox_head:
+                bh.dynamic_sampling()
+                bh.loss_cls.close_cums()
         # -- end
 
         self.call_hook('after_val_epoch')

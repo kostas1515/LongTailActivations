@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from mmcv.cnn import CONV_LAYERS
+import pandas as pd
 
 from .builder import LINEAR_LAYERS
 
@@ -18,17 +19,18 @@ class NormedLinear(nn.Linear):
              keep numerical stability. Default to 1e-6.
     """
 
-    def __init__(self, *args, tempearture=20, power=1.0, eps=1e-6, **kwargs):
+    def __init__(self, *args, tempearture=20, power=1.0, eps=1e-6, init_bias=0, **kwargs):
         super(NormedLinear, self).__init__(*args, **kwargs)
         self.tempearture = tempearture
         self.power = power
         self.eps = eps
+        self.init_bias = init_bias
         self.init_weights()
 
     def init_weights(self):
         nn.init.normal_(self.weight, mean=0, std=0.01)
         if self.bias is not None:
-            nn.init.constant_(self.bias, 0)
+            nn.init.constant_(self.bias, self.init_bias)
 
     def forward(self, x):
         weight_ = self.weight / (

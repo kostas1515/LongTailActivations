@@ -62,7 +62,6 @@ def binary_cross_entropy(pred,
                                               ignore_index)   
     if weight is not None:
         weight = weight.float()
-    
     if activation_name=='gumbel':
         pred=torch.clamp(pred,min=-4,max=10)
         pestim= 1/(torch.exp(torch.exp(-(pred))))

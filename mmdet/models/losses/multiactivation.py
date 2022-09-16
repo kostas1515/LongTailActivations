@@ -57,18 +57,18 @@ def binary_cross_entropy(pred,
     
     ignore_index = -100 if ignore_index is None else ignore_index
     if pred.dim() != label.dim():
-        label, weight = _expand_onehot_labels(label, weight, pred.size(-1)-3,
+        label, weight = _expand_onehot_labels(label, weight, pred.size(-1)-2,
                                               ignore_index)   
     if weight is not None:
         weight = weight.float()
     
-    probability_weights = torch.softmax(pred[:,-3:],dim=1)
+    probability_weights = torch.softmax(pred[:,-2:],dim=1)
     
 
-    pestim_g = 1/(torch.exp(torch.exp(-(torch.clamp(pred[:,:-3],min=-4,max=10)))))
-    pestim_s = torch.sigmoid(pred[:,:-3])
-    pestim_n=1/2+torch.erf(torch.clamp(pred[:,:-3],min=-5,max=5)/(2**(1/2)))/2
-    p_final = pestim_g*probability_weights[:,0:1]+pestim_s*probability_weights[:,1:2]+pestim_n*probability_weights[:,2:]
+    pestim_g = 1/(torch.exp(torch.exp(-(torch.clamp(pred[:,:-2],min=-5,max=10)))))
+#     pestim_s = torch.sigmoid(pred[:,:-3])
+    pestim_n=1/2+torch.erf(torch.clamp(pred[:,:-2],min=-6,max=6)/(2**(1/2)))/2
+    p_final = pestim_g*probability_weights[:,0:1]+pestim_n*probability_weights[:,1:]
 #         print(pred)
         
 #         with torch.no_grad():
@@ -137,12 +137,12 @@ class MultiActivation(nn.Module):
             torch.Tensor: The custom activation of cls_score with shape
                  (N, C).
         """
-        probability_weights = torch.softmax(cls_score[:,-3:],dim=-1)
+        probability_weights = torch.softmax(cls_score[:,-2:],dim=-1)
 
-        scores_g = 1/(torch.exp(torch.exp(-cls_score[:,:-3])))
-        scores_s = torch.sigmoid(cls_score[:,:-3])
-        scores_n=1/2+torch.erf(cls_score[:,:-3]/(2**(1/2)))/2
-        scores= scores_g*probability_weights[:,0:1]+scores_s*probability_weights[:,1:2]+scores_n*probability_weights[:,2:]
+        scores_g = 1/(torch.exp(torch.exp(-cls_score[:,:-2])))
+#         scores_s = torch.sigmoid(cls_score[:,:-3])
+        scores_n=1/2+torch.erf(cls_score[:,:-2]/(2**(1/2)))/2
+        scores= scores_g*probability_weights[:,0:1]+scores_n*probability_weights[:,1:]
             
         
         return scores
@@ -157,7 +157,7 @@ class MultiActivation(nn.Module):
             int: The custom classification channels.
         """
         assert num_classes == self.num_classes
-        return num_classes + 4
+        return num_classes + 3
     
     def get_accuracy(self, cls_score, labels):
         """Get custom accuracy w.r.t. cls_score and labels.
@@ -170,7 +170,7 @@ class MultiActivation(nn.Module):
             Dict [str, torch.Tensor]: The accuracy for objectness and classes,
                  respectively.
         """
-        acc_classes = accuracy(cls_score[:,:-3], labels)
+        acc_classes = accuracy(cls_score[:,:-2], labels)
         acc = dict()
         acc['acc_classes'] = acc_classes
         

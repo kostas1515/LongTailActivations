@@ -6,3 +6,5 @@ model = dict(roi_head=dict(bbox_head=dict(loss_cls=dict(type="Icloglog",activati
                                          init_cfg = dict(type='Constant',val=0.001, bias=-3.2, override=dict(name='fc_cls')))))
 
 work_dir='./experiments/normal_r50_rfs_4x4_2x/'
+
+resume_from = './experiments/normal_r50_rfs_4x4_2x/latest.pth'

@@ -80,6 +80,7 @@ class CrossEntropyCounterLoss(nn.Module):
                 self.class_weight, device=cls_score.device)
         else:
             class_weight = None
+        
         loss_cls = self.loss_weight * self.cls_criterion(
             cls_score,
             label,
