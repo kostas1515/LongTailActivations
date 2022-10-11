@@ -30,6 +30,9 @@ from .fasa_loss import CrossEntropyCounterLoss
 from .fasa_iif_loss import FasaIIFLoss
 from .fasa_ada_iif_loss import FasaADAIIFLoss
 from .ldam import LDAM
+from .gumbel_cross_entropy_loss import GumbelCrossEntropyLoss
+from .ifd_loss import IFDLoss
+
 
 
 
@@ -44,5 +47,5 @@ __all__ = [
     'GaussianFocalLoss', 'QualityFocalLoss', 'DistributionFocalLoss',
     'VarifocalLoss', 'KnowledgeDistillationKLDivLoss', 'SeesawLoss','Icloglog',
     'MultiActivation','BalancedSoftmax','ACSL','EQLv2','IIFLoss','CrossEntropyCounterLoss','ADAIIFLoss','ADARELIIFLoss',
-    'FasaIIFLoss','FasaADAIIFLoss','LDAM'
+    'FasaIIFLoss','FasaADAIIFLoss','LDAM','GumbelCrossEntropyLoss','IFDLoss',
 ]

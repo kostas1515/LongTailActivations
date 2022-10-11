@@ -65,9 +65,9 @@ def binary_cross_entropy(pred,
     probability_weights = torch.softmax(pred[:,-2:],dim=1)
     
 
-    pestim_g = 1/(torch.exp(torch.exp(-(torch.clamp(pred[:,:-2],min=-5,max=10)))))
+    pestim_g = 1/(torch.exp(torch.exp(-(torch.clamp(pred[:,:-2],min=-4,max=10)))))
 #     pestim_s = torch.sigmoid(pred[:,:-3])
-    pestim_n=1/2+torch.erf(torch.clamp(pred[:,:-2],min=-6,max=6)/(2**(1/2)))/2
+    pestim_n=1/2+torch.erf(torch.clamp(pred[:,:-2],min=-5,max=8)/(2**(1/2)))/2
     p_final = pestim_g*probability_weights[:,0:1]+pestim_n*probability_weights[:,1:]
 #         print(pred)
         
