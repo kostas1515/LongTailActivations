@@ -6,9 +6,6 @@ import numpy as np
 from ..builder import LOSSES
 from .utils import weight_reduce_loss
 from .accuracy import accuracy
-import pandas as pd
-import torch.distributed as dist
-
 
 
 def _expand_onehot_labels(labels, label_weights, label_channels, ignore_index):
@@ -31,29 +28,88 @@ def _expand_onehot_labels(labels, label_weights, label_channels, ignore_index):
 
     return bin_labels, bin_label_weights
 
-
 def logsumexp(x):
     alpha=torch.exp(x)
     return alpha+torch.log(1.0-torch.exp(-alpha))
+
+
+
+def binary_cross_entropy(pred,
+                         label,
+                         weight=None,
+                         reduction='mean',
+                         avg_factor=None,
+                         class_weight=None,
+                         ignore_index=-100,
+                         inverse=False):
+    
+    """Calculate the binary CrossEntropy loss.
+
+    Args:
+        pred (torch.Tensor): The prediction.
+        label (torch.Tensor): The learning label of the prediction.
+        weight (torch.Tensor, optional): Sample-wise loss weight.
+        reduction (str, optional): The method used to reduce the loss.
+            Options are "none", "mean" and "sum".
+        avg_factor (int, optional): Average factor that is used to average
+            the loss. Defaults to None.
+        class_weight (list[float], optional): The weight for each class.
+        ignore_index (int | None): The label index to be ignored.
+            If None, it will be set to default value. Default: -100.
+
+    Returns:
+        torch.Tensor: The calculated loss.
+    """
+    # The default value of ignore_index is the same as F.cross_entropy
+    
+    ignore_index = -100 if ignore_index is None else ignore_index
+    if pred.dim() != label.dim():
+        label, weight = _expand_onehot_labels(label, weight, pred.size(-1),
+                                              ignore_index)   
+    if weight is not None:
+        weight = weight.float()
+
+    
+    
+    if inverse is True:
+        pred=torch.clamp(pred,min=-10,max=10)
+        loss=-label.float()*(logsumexp(pred)-torch.exp(pred)) + (1.0-label.float())*torch.exp(pred)
+        
+#         pestim = 1 - (1/(torch.exp(torch.exp(pred))))
+    else:
+        pred=torch.clamp(pred,min=-10,max=10)
+        loss=torch.exp(-pred)*label.float() +(label.float()-1.0)*(logsumexp(-pred)-torch.exp(-pred))
+        
+#         pestim = 1/(torch.exp(torch.exp(-pred)))
+
+    
+#     loss2 = F.binary_cross_entropy(
+#         pestim, label.float(), reduction='none')
+    
+    # do the reduction for the weighted loss
+    loss = weight_reduce_loss(
+        loss, weight, reduction=reduction, avg_factor=avg_factor)
+    loss=torch.clamp(loss,min=0,max=20)
+    
+    return loss
+
+
 
 @LOSSES.register_module()
 class GumbelCrossEntropyLoss(nn.Module):
 
     def __init__(self,
-                 use_sigmoid=True,
-                 temperature=1.0,
-                 use_iif=None,
+                 use_sigmoid=True, #dummy arg, non-applicable, required by mmdet
                  reduction='mean',
                  class_weight=None,
                  loss_weight=1.0,
                  num_classes=1203,
-                 lvis_file='./lvis_files/idf_1204.csv',
-                 **kwargs):
+                 inverse=False):
         """CrossEntropyLoss.
 
         Args:
-            use_sigmoid (bool, optional): Whether the prediction uses sigmoid
-                of softmax. Defaults to False.
+            use_sigmoid (bool, optional): dummy arg, non-applicable, required by mmdet
+            Defaults to True.
             use_mask (bool, optional): Whether to use mask cross entropy loss.
                 Defaults to False.
             reduction (str, optional): . Defaults to 'mean'.
@@ -63,7 +119,7 @@ class GumbelCrossEntropyLoss(nn.Module):
             loss_weight (float, optional): Weight of the loss. Defaults to 1.0.
         """
         super(GumbelCrossEntropyLoss, self).__init__()
-
+        
         self.reduction = reduction
         self.loss_weight = loss_weight
         self.class_weight = class_weight
@@ -75,47 +131,19 @@ class GumbelCrossEntropyLoss(nn.Module):
         self.custom_activation = True
         # custom accuracy of the classsifier
         self.custom_accuracy = True
-        self.temperature=temperature
         
-        if use_iif is not None:
-            self.use_iif = True
-            if use_iif == 'adaptive':
-                self.adaptive_iif = True
-                self.moving_avg=2.0
-                self.alpha=0.9
-            else:
-                self.adaptive_iif = False
-                self.iif_weights = pd.read_csv(lvis_file)[use_iif].values.tolist()
-                self.iif_weights = self.iif_weights[1:]+[1.0] #+1 for bg
-                self.iif_weights = torch.tensor(self.iif_weights,device='cuda',dtype=torch.float).unsqueeze(0)
-        else:
-            self.use_iif = False
-            
+        self.inverse = inverse
 
-        self.cls_criterion = self.gumbel_cross_entropy
+
+        self.cls_criterion = binary_cross_entropy
         
-    def get_activation(self, cls_score,raw=False):
+    def get_activation(self, cls_score):
         """Get custom activation of cls_score.
-
-        Args:
-            cls_score (torch.Tensor): The prediction with shape (N, C).
-
-        Returns:
-            torch.Tensor: The custom activation of cls_score with shape
-                 (N, C).
         """
-        if raw is True:
-            scores = 1/(torch.exp(torch.exp(-cls_score/self.temperature)))
-            return scores
+        if self.inverse is True:
+            scores = 1 - (1/(torch.exp(torch.exp(cls_score))))
         else:
-            if self.use_iif is True:
-                if self.adaptive_iif is True:
-                    avg_w = self.get_adaptive_weight(cls_score)
-                    scores = self.get_activation(avg_w*cls_score,raw=True)
-                else:
-                    scores = self.get_activation(self.iif_weights*cls_score,raw=True)
-                    
-            
+            scores = 1/(torch.exp(torch.exp(-cls_score)))
         
         return scores
     
@@ -133,17 +161,8 @@ class GumbelCrossEntropyLoss(nn.Module):
     
     def get_accuracy(self, cls_score, labels):
         """Get custom accuracy w.r.t. cls_score and labels.
-
-        Args:
-            cls_score (torch.Tensor): The prediction with shape (N, C).
-            labels (torch.Tensor): The learning label of the prediction.
-
-        Returns:
-            Dict [str, torch.Tensor]: The accuracy for objectness and classes,
-                 respectively.
         """
-        pos_inds = labels < self.num_classes
-        acc_classes = accuracy(cls_score[pos_inds], labels[pos_inds])
+        acc_classes = accuracy(cls_score, labels)
         acc = dict()
         acc['acc_classes'] = acc_classes
         
@@ -177,6 +196,7 @@ class GumbelCrossEntropyLoss(nn.Module):
             class_weight = cls_score.new_tensor(self.class_weight)
         else:
             class_weight = None
+        
         loss_cls = self.loss_weight * self.cls_criterion(
             cls_score,
             label,
@@ -184,63 +204,7 @@ class GumbelCrossEntropyLoss(nn.Module):
             class_weight=class_weight,
             reduction=reduction,
             avg_factor=avg_factor,
+            inverse=self.inverse,
             **kwargs)
+        
         return loss_cls
-    
-    def get_adaptive_weight(self,pred):
-        w = -torch.log10(self.get_activation(pred,raw=True))
-        batch_w=[torch.zeros_like(w) for _ in range(dist.get_world_size())]
-        dist.all_gather(batch_w,w)
-        batch_w=torch.cat(batch_w,axis=0)
-        avg_w = batch_w.mean(axis=0).unsqueeze(0)
-#         print('avg weight is:',avg_w)
-        #make bg weight 1
-        avg_w[torch.isinf(avg_w)]=1.0
-        avg_w[torch.isnan(avg_w)]=1.0
-        avg_w[:,-1]=1.0
-        avg_w=torch.clamp(avg_w,max=6.2)
-        
-        self.moving_avg = self.moving_avg*self.alpha + (1-self.alpha)*avg_w
-        
-        
-        return self.moving_avg
-        
-
-
-    def gumbel_cross_entropy(self,
-                            pred,
-                            label,
-                            weight=None,
-                            reduction='mean',
-                            avg_factor=None,
-                            class_weight=None,
-                            ignore_index=-100):
-        
-        ignore_index = -100 if ignore_index is None else ignore_index
-        if pred.dim() != label.dim():
-            label, weight = _expand_onehot_labels(label, weight, pred.size(-1),
-                                                ignore_index)   
-        if weight is not None:
-            weight = weight.float()
-        
-        if self.use_iif is True:
-            if self.adaptive_iif is True:
-                avg_w = self.get_adaptive_weight(pred)
-                pred=torch.clamp(pred*avg_w,min=-5,max=12)
-#                 pred=pred*avg_w
-            else:
-#                 pred = pred*self.iif_weights
-                pred=torch.clamp(pred*self.iif_weights,min=-5,max=12)
-                
-        else:
-            pred=torch.clamp(pred,min=-5,max=12)
-            
-        
-        loss=torch.exp(-pred/self.temperature)*label.float() +(label.float()-1.0)*(logsumexp(-pred/self.temperature)-torch.exp(-pred/self.temperature))
-        
-        loss = weight_reduce_loss(
-            loss, weight, reduction=reduction, avg_factor=avg_factor)
-        loss=torch.clamp(loss,max=30.0)
-        
-        return loss
-        
