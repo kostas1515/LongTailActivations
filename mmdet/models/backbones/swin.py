@@ -1,3 +1,4 @@
+# Copyright (c) OpenMMLab. All rights reserved.
 import warnings
 from collections import OrderedDict
 from copy import deepcopy
@@ -8,6 +9,7 @@ import torch.nn.functional as F
 import torch.utils.checkpoint as cp
 from mmcv.cnn import build_norm_layer, constant_init, trunc_normal_init
 from mmcv.cnn.bricks.transformer import FFN, build_dropout
+from mmcv.cnn.utils.weight_init import trunc_normal_
 from mmcv.runner import BaseModule, ModuleList, _load_checkpoint
 from mmcv.utils import to_2tuple
 
@@ -15,6 +17,30 @@ from ...utils import get_root_logger
 from ..builder import BACKBONES
 from ..utils.ckpt_convert import swin_converter
 from ..utils.transformer import PatchEmbed, PatchMerging
+
+class SoftmaxGumbel(nn.Module):
+    r"""Applies the element-wise function:
+
+    .. math::
+        \text{Gumbel}(x) = \gamma(x) = \frac{1}{\exp\exp(-x)}
+
+
+    Shape:
+        - Input: :math:`(*)`, where :math:`*` means any number of dimensions.
+        - Output: :math:`(*)`, same shape as the input.
+
+    Examples::
+
+        >>> m = nn.SoftmaxGumbel()
+        >>> input = torch.randn(2)
+        >>> output = m(input)
+    """
+
+    def forward(self, input):
+        gumbel_gain = torch.exp(-torch.exp(-torch.clamp(input,min=-4,max=10)))
+        softmax_gain = input.softmax(dim=-1)
+        return gumbel_gain*softmax_gain
+   
 
 
 class WindowMSA(BaseModule):
@@ -44,7 +70,8 @@ class WindowMSA(BaseModule):
                  qk_scale=None,
                  attn_drop_rate=0.,
                  proj_drop_rate=0.,
-                 init_cfg=None):
+                 init_cfg=None,
+                 attn_type='softmax'):
 
         super().__init__()
         self.embed_dims = embed_dims
@@ -70,11 +97,15 @@ class WindowMSA(BaseModule):
         self.attn_drop = nn.Dropout(attn_drop_rate)
         self.proj = nn.Linear(embed_dims, embed_dims)
         self.proj_drop = nn.Dropout(proj_drop_rate)
-
-        self.softmax = nn.Softmax(dim=-1)
+        
+        if attn_type =='gumbel_softmax':
+            self.softmax = SoftmaxGumbel()
+        else:
+            self.softmax = nn.Softmax(dim=-1)
+            
 
     def init_weights(self):
-        trunc_normal_init(self.relative_position_bias_table, std=0.02)
+        trunc_normal_(self.relative_position_bias_table, std=0.02)
 
     def forward(self, x, mask=None):
         """
@@ -156,11 +187,13 @@ class ShiftWindowMSA(BaseModule):
                  attn_drop_rate=0,
                  proj_drop_rate=0,
                  dropout_layer=dict(type='DropPath', drop_prob=0.),
-                 init_cfg=None):
+                 init_cfg=None,
+                 attn_type='softmax'):
         super().__init__(init_cfg)
 
         self.window_size = window_size
         self.shift_size = shift_size
+        self.attn_type = attn_type
         assert 0 <= self.shift_size < self.window_size
 
         self.w_msa = WindowMSA(
@@ -171,7 +204,8 @@ class ShiftWindowMSA(BaseModule):
             qk_scale=qk_scale,
             attn_drop_rate=attn_drop_rate,
             proj_drop_rate=proj_drop_rate,
-            init_cfg=None)
+            init_cfg=None,
+            attn_type=self.attn_type)
 
         self.drop = build_dropout(dropout_layer)
 
@@ -322,12 +356,14 @@ class SwinBlock(BaseModule):
                  act_cfg=dict(type='GELU'),
                  norm_cfg=dict(type='LN'),
                  with_cp=False,
-                 init_cfg=None):
+                 init_cfg=None,
+                 attn_type='softmax'):
 
         super(SwinBlock, self).__init__()
 
         self.init_cfg = init_cfg
         self.with_cp = with_cp
+        self.attn_type=attn_type
 
         self.norm1 = build_norm_layer(norm_cfg, embed_dims)[1]
         self.attn = ShiftWindowMSA(
@@ -340,7 +376,8 @@ class SwinBlock(BaseModule):
             attn_drop_rate=attn_drop_rate,
             proj_drop_rate=drop_rate,
             dropout_layer=dict(type='DropPath', drop_prob=drop_path_rate),
-            init_cfg=None)
+            init_cfg=None,
+            attn_type=self.attn_type)
 
         self.norm2 = build_norm_layer(norm_cfg, embed_dims)[1]
         self.ffn = FFN(
@@ -420,7 +457,8 @@ class SwinBlockSequence(BaseModule):
                  act_cfg=dict(type='GELU'),
                  norm_cfg=dict(type='LN'),
                  with_cp=False,
-                 init_cfg=None):
+                 init_cfg=None,
+                 attn_type='softmax'):
         super().__init__(init_cfg=init_cfg)
 
         if isinstance(drop_path_rate, list):
@@ -430,6 +468,7 @@ class SwinBlockSequence(BaseModule):
             drop_path_rates = [deepcopy(drop_path_rate) for _ in range(depth)]
 
         self.blocks = ModuleList()
+        self.attn_type = attn_type
         for i in range(depth):
             block = SwinBlock(
                 embed_dims=embed_dims,
@@ -445,7 +484,8 @@ class SwinBlockSequence(BaseModule):
                 act_cfg=act_cfg,
                 norm_cfg=norm_cfg,
                 with_cp=with_cp,
-                init_cfg=None)
+                init_cfg=None,
+                attn_type=self.attn_type)
             self.blocks.append(block)
 
         self.downsample = downsample
@@ -514,7 +554,7 @@ class SwinTransformer(BaseModule):
             to convert some keys to make it compatible.
             Default: False.
         frozen_stages (int): Stages to be frozen (stop grad and set eval mode).
-            -1 means not freezing any parameters.
+            Default: -1 (-1 means not freezing any parameters).
         init_cfg (dict, optional): The Config for initialization.
             Defaults to None.
     """
@@ -543,9 +583,11 @@ class SwinTransformer(BaseModule):
                  pretrained=None,
                  convert_weights=False,
                  frozen_stages=-1,
-                 init_cfg=None):
+                 init_cfg=None,
+                 attn_type='softmax'):
         self.convert_weights = convert_weights
         self.frozen_stages = frozen_stages
+        self.attn_type = attn_type
         if isinstance(pretrain_img_size, int):
             pretrain_img_size = to_2tuple(pretrain_img_size)
         elif isinstance(pretrain_img_size, tuple):
@@ -626,7 +668,8 @@ class SwinTransformer(BaseModule):
                 act_cfg=act_cfg,
                 norm_cfg=norm_cfg,
                 with_cp=with_cp,
-                init_cfg=None)
+                init_cfg=None,
+                attn_type=self.attn_type)
             self.stages.append(stage)
             if downsample:
                 in_channels = downsample.out_channels
@@ -672,15 +715,12 @@ class SwinTransformer(BaseModule):
                         f'{self.__class__.__name__}, '
                         f'training start from scratch')
             if self.use_abs_pos_embed:
-                trunc_normal_init(self.absolute_pos_embed, std=0.02)
+                trunc_normal_(self.absolute_pos_embed, std=0.02)
             for m in self.modules():
                 if isinstance(m, nn.Linear):
-                    trunc_normal_init(m.weight, std=.02)
-                    if m.bias is not None:
-                        constant_init(m.bias, 0)
+                    trunc_normal_init(m, std=.02, bias=0.)
                 elif isinstance(m, nn.LayerNorm):
-                    constant_init(m.bias, 0)
-                    constant_init(m.weight, 1.0)
+                    constant_init(m, 1.0)
         else:
             assert 'checkpoint' in self.init_cfg, f'Only support ' \
                                                   f'specify `Pretrained` in ' \
