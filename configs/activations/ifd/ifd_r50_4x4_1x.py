@@ -11,4 +11,5 @@ model = dict(roi_head=dict(bbox_head=dict(loss_cls=dict(type="IFDLoss",variant='
                                          init_cfg = dict(type='Constant',val=0.001, bias=0.0, override=dict(name='fc_cls')))))
 
 work_dir='./experiments/iif/ifd_r50_4x4_1x_raw/'
+resume_from = './experiments/iif/ifd_r50_4x4_1x_raw/latest.pth'
 # work_dir='./experiments/test/'

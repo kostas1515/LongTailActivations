@@ -79,7 +79,7 @@ class IIFLoss(nn.Module):
         if self.log_adj is True:
             scores = torch.softmax(cls_score,dim=-1)
         else:
-            scores = torch.softmax(self.iif_weights*cls_score,dim=-1)
+            scores = torch.softmax(cls_score/self.iif_weights,dim=-1)
 
         return scores
     
@@ -198,7 +198,7 @@ class IIFLoss(nn.Module):
             ignore_index=ignore_index)
         else:
             loss = F.cross_entropy(
-                pred*self.iif_weights,
+                pred/self.iif_weights,
                 label,
                 weight=class_weight,
                 reduction='none',
