@@ -13,6 +13,30 @@ from skimage.filters import gaussian
 
 @HEADS.register_module()
 class ConvFCLocalBBoxHead(ConvFCBBoxHead):
+    def __init__(self,
+                 num_shared_convs=0,
+                 num_shared_fcs=0,
+                 num_cls_convs=0,
+                 num_cls_fcs=0,
+                 num_reg_convs=0,
+                 num_reg_fcs=0,
+                 conv_out_channels=256,
+                 fc_out_channels=1024,
+                 conv_cfg=None,
+                 norm_cfg=None,
+                 init_cfg=None,
+                 dim=2,
+                 *args,
+                 **kwargs):
+        super(ConvFCLocalBBoxHead,
+              self).__init__(num_shared_convs, num_shared_fcs, num_cls_convs,
+                             num_cls_fcs, num_reg_convs, num_reg_fcs,
+                             conv_out_channels, fc_out_channels, conv_cfg,
+                             norm_cfg, init_cfg, *args, **kwargs)
+        try:
+            self.wy,self.wbg = self.get_local_weights('./lvis_files/lvis_statistics.csv',1203,dim=dim)
+        except FileNotFoundError:
+            self.wy,self.wbg = self.get_local_weights('../lvis_files/lvis_statistics.csv',1203,dim=dim)
         
     def get_local_weights(self,lvis_file,num_categories,dim=32,base=10):
         
@@ -40,27 +64,39 @@ class ConvFCLocalBBoxHead(ConvFCBBoxHead):
 #                 true_loc_bias_val[j,i,:] = bins/bins.sum() #original
                 true_loc_bias_val[j,i,:] = (bins)/(bins.sum())
 
-        true_pobj=(true_img_val/len(categories)) #original
-#         true_pobj = (true_img_val+1)/len(categories)
+#         true_pobj=(true_img_val/len(categories)) #original
+        pobj = (true_img_val)/len(categories)
 #         p_bg = 1 - (true_img_val)/len(categories)
 
-        py=np.expand_dims(true_pobj, axis=-1)*true_loc_bias_val
-        weights = -logarithm(py,base)
-        weights[np.isinf(weights)]=0
-        weights[np.isnan(weights)]=0
+        py=np.expand_dims(pobj, axis=-1)*true_loc_bias_val
+#         weights = -logarithm(py,base)
+        fg_weights = -np.log(py)
+        fg_weights[np.isinf(fg_weights)]=0
+        fg_weights[np.isnan(fg_weights)]=0
+        
 #         for i in range(py.shape[2]):
 #             weights[:,:,i]=gaussian(weights[:,:,i], sigma=1)
 #         smoothed_weights[smoothed_weights==0]=1
         
-        obj_weights = -logarithm(true_pobj,base)
-        obj_weights[np.isinf(obj_weights)]=0
-        obj_weights[np.isnan(obj_weights)]=0
+#         obj_weights = -logarithm(true_pobj,base)
+#         obj_weights[np.isinf(obj_weights)]=0
+#         obj_weights[np.isnan(obj_weights)]=0
         
-        obj_weights = np.ones((dim,dim))
+        p_bg = 1 - pobj
+        bg_weight =  np.zeros((dim,dim))
+#         print('before',fg_weights)
+        
+        ptarget = np.log(np.expand_dims(pobj, axis=-1)/1203)
+        ptarget[np.isinf(ptarget)] = 0.0
+        ptarget[np.isnan(ptarget)] = 0.0
+        
+        fg_weights = fg_weights + ptarget
+#         print('after',fg_weights)
+#         bg_weight =  np.zeros((dim,dim))
         
         
 #         return torch.tensor(smoothed_weights-np.expand_dims(obj_weights, axis=-1),device='cuda',dtype=torch.float)
-        return torch.tensor(weights,device='cuda',dtype=torch.float),torch.tensor(obj_weights,device='cuda',dtype=torch.float)
+        return torch.tensor(fg_weights,device='cuda',dtype=torch.float),torch.tensor(bg_weight,device='cuda',dtype=torch.float)
 
 
     def get_norcal_weights(self,lvis_file,num_categories,dim=1):
@@ -87,6 +123,7 @@ class ConvFCLocalBBoxHead(ConvFCBBoxHead):
 #         return torch.tensor(smoothed_weights-np.expand_dims(obj_weights, axis=-1),device='cuda',dtype=torch.float)
 
         weights = true_loc_bias_val**0.6
+    
     
         bg_weights = np.ones((dim,dim))
         return torch.tensor(weights,device='cuda',dtype=torch.float),torch.tensor(bg_weights,device='cuda',dtype=torch.float)
@@ -158,7 +195,7 @@ class ConvFCLocalBBoxHead(ConvFCBBoxHead):
         
         weights = self.wy[jc,ic,:]
         weights = torch.squeeze(weights,axis=1)
-        weights = weights/torch.unsqueeze(torch.norm(weights,dim=1),axis=1)
+#         weights = weights/torch.unsqueeze(torch.norm(weights,dim=1),axis=1)
         
 #         weights[weights==0]=1
         
@@ -176,13 +213,13 @@ class ConvFCLocalBBoxHead(ConvFCBBoxHead):
             scores = self.loss_cls.get_activation(cls_score)
         else:
             scores = F.softmax(
-                cls_score, dim=-1) if cls_score is not None else None
+                cls_score+weights, dim=-1) if cls_score is not None else None
         
         
-        scores = scores*weights
+#         scores = scores/weights
         
-        if cfg.renorm is True:
-            scores /= scores.sum(dim=1, keepdim=True)
+
+#         scores /= scores.sum(dim=1, keepdim=True)
         
         
         if cfg is None:
@@ -209,7 +246,8 @@ class Shared2FCLocalBBoxHead(ConvFCLocalBBoxHead):
             *args,
             **kwargs)
         
-        self.wy,self.wbg = self.get_local_weights('./lvis_files/lvis_statistics_v0.5.csv',1230,dim=5)
+            
+#         self.wy,self.wbg = self.get_norcal_weights('./lvis_files/lvis_statistics.csv',1203,dim=1)
         
 
         

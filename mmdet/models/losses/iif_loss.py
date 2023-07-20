@@ -35,7 +35,7 @@ class IIFLoss(nn.Module):
             loss_weight (float, optional): Weight of the loss. Defaults to 1.0.
         """
         super(IIFLoss, self).__init__()
-        assert (use_sigmoid is False)
+#         assert (use_sigmoid is False)
         self.use_sigmoid = use_sigmoid
         self.reduction = reduction
         self.loss_weight = loss_weight
@@ -49,8 +49,8 @@ class IIFLoss(nn.Module):
         else:
             self.iif_weights =pd.read_csv(path)[variant].values.tolist()
             self.log_adj=False
-            
-        self.iif_weights = self.iif_weights[1:]+[1.0] #+1 for bg
+        
+        self.iif_weights = self.iif_weights[1:]+[1.0] 
         self.iif_weights = torch.tensor(self.iif_weights,device='cuda',dtype=torch.float).unsqueeze(0)
                 
         
@@ -79,7 +79,10 @@ class IIFLoss(nn.Module):
         if self.log_adj is True:
             scores = torch.softmax(cls_score,dim=-1)
         else:
-            scores = torch.softmax(cls_score/self.iif_weights,dim=-1)
+            if self.use_sigmoid is True:
+                scores = (cls_score*self.iif_weights).sigmoid()
+            else:
+                scores = torch.softmax(cls_score*self.iif_weights,dim=-1)
 
         return scores
     
@@ -93,7 +96,9 @@ class IIFLoss(nn.Module):
             int: The custom classification channels.
         """
         assert num_classes == self.num_classes
+
         return num_classes + 1
+            
     
     def get_accuracy(self, cls_score, labels):
         """Get custom accuracy w.r.t. cls_score and labels.
@@ -198,7 +203,7 @@ class IIFLoss(nn.Module):
             ignore_index=ignore_index)
         else:
             loss = F.cross_entropy(
-                pred/self.iif_weights,
+                pred*self.iif_weights,
                 label,
                 weight=class_weight,
                 reduction='none',

@@ -5,8 +5,8 @@ _base_ = [
 # data = dict(train=dict(oversample_thr=0.0))
 data = dict(train=dict(oversample_thr=0.0),samples_per_gpu=4)
 
-model = dict(roi_head=dict(bbox_head=dict(loss_cls=dict(type="Icloglog",activation='sigmoid'),
-                                         init_cfg = dict(type='Constant',val=0.001, bias=-5, override=dict(name='fc_cls')))))
+# model = dict(roi_head=dict(bbox_head=dict(loss_cls=dict(type="Icloglog",activation='sigmoid'),
+#                                          init_cfg = dict(type='Constant',val=0.001, bias=-5, override=dict(name='fc_cls')))))
 
 # work_dir='./experiments/r50_4x4_1x_clone/'
 work_dir='./experiments/test/'

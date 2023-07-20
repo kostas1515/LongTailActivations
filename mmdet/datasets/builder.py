@@ -65,8 +65,12 @@ def build_dataset(cfg, default_args=None):
         dataset = RepeatDataset(
             build_dataset(cfg['dataset'], default_args), cfg['times'])
     elif cfg['type'] == 'ClassBalancedDataset':
+        try:
+            instance = cfg['instance']
+        except KeyError:
+            instance =False
         dataset = ClassBalancedDataset(
-            build_dataset(cfg['dataset'], default_args), cfg['oversample_thr'])
+            build_dataset(cfg['dataset'], default_args), cfg['oversample_thr'],instance=instance)
     elif cfg['type'] == 'MultiImageMixDataset':
         cp_cfg = copy.deepcopy(cfg)
         cp_cfg['dataset'] = build_dataset(cp_cfg['dataset'])

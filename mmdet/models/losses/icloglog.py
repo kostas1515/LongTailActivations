@@ -6,6 +6,7 @@ import numpy as np
 from ..builder import LOSSES
 from .utils import weight_reduce_loss
 from .accuracy import accuracy
+import pandas as pd
 
 
 def _expand_onehot_labels(labels, label_weights, label_channels, ignore_index):
@@ -123,7 +124,13 @@ class Icloglog(nn.Module):
         self.custom_activation = True
         # custom accuracy of the classsifier
         self.custom_accuracy = True
-
+        
+        if self.activation_name =='norcal':
+            self.norcal_weights =pd.read_csv('./lvis_files/idf_1204.csv')['img_freq'].values.tolist()
+            self.norcal_weights = self.norcal_weights[1:]+[1.0] #+1 for bg
+            self.norcal_weights = torch.tensor(self.norcal_weights,device='cuda',dtype=torch.float).unsqueeze(0)
+            self.norcal_weights =self.norcal_weights**(0.6)
+            print(self.norcal_weights)
 
         self.cls_criterion = binary_cross_entropy
         
@@ -141,9 +148,10 @@ class Icloglog(nn.Module):
             scores = 1/(torch.exp(torch.exp(-cls_score)))
         elif self.activation_name=='normal':
             scores=1/2+torch.erf(cls_score/(2**(1/2)))/2
-
-            
-        
+        elif self.activation_name=='norcal':
+            scores = F.softmax(cls_score, dim=-1)
+            scores = scores*self.norcal_weights
+            scores /= scores.sum(dim=1, keepdim=True)   
         return scores
     
     def get_cls_channels(self, num_classes):

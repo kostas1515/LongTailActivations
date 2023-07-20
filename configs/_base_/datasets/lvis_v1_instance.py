@@ -9,6 +9,7 @@ data = dict(
         _delete_=True,
         type='ClassBalancedDataset',
         oversample_thr=1e-3,
+        instance = False,
         dataset=dict(
             type=dataset_type,
             ann_file=data_root + 'annotations/lvis_v1_train.json',
